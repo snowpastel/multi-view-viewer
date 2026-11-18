@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<floater name="second_view" title="第2カメラ">
+    <button name="body" label="全身" />
+    <button name="face" label="顔" />
+    <button name="reset" label="リセット" />
+    <check_box name="sun_shadows" label="太陽・月の影" />
+</floater>

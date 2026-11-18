@@ -704,6 +704,23 @@ public:
 
     // main full resoltuion render target
     RenderTargetPack mMainRT;
+    RenderTargetPack mSecondViewRT;
+    LLRenderTarget mSecondViewImage;
+    // Keep transforms from the pass that actually wrote the main shadow maps.
+    glm::mat4 mMainShadowView{1.f};
+    glm::mat4 mMainShadowMatrices[6]{};
+    LLVector4 mMainShadowSplits;
+    bool mMainShadowFrameValid = false;
+    glm::mat4 mSecondViewShadowMatrices[6]{};
+    glm::vec4 mSecondViewShadowDepth{0.f, 0.f, 1.f, 0.f};
+    bool mSecondViewSunShadows = false;
+    void prepareSecondViewShadows(const glm::mat4& inset_view, bool enabled);
+    LLRenderTarget mSecondViewWaterDis;
+    LLRenderTarget mSecondViewWaterMask;
+    bool ensureSecondViewTargets(U32 width, U32 height);
+    void releaseSecondViewTargets();
+    LLRenderTarget& waterDisplacementTarget() { return mRT == &mSecondViewRT ? mSecondViewWaterDis : mWaterDis; }
+    LLRenderTarget& waterExclusionTarget() { return mRT == &mSecondViewRT ? mSecondViewWaterMask : mWaterExclusionMask; }
 
     // auxillary 512x512 render target pack
     // used by reflection probes and dynamic texture bakes

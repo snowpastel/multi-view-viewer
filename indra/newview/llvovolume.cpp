@@ -55,6 +55,7 @@
 #include "llhudmanager.h"
 #include "llflexibleobject.h"
 #include "llskinningutil.h"
+#include "llsecondviewlod.h"
 #include "llsky.h"
 #include "lltexturefetch.h"
 #include "llvector4a.h"
@@ -1526,6 +1527,10 @@ bool LLVOVolume::calcLOD()
     if (mDrawable->isState(LLDrawable::RIGGED))
     {
         LLVOAvatar* avatar = getAvatar();
+        if (!avatar && secondViewMeshLODDistance(getID(), 0.f) > 0.f)
+        {
+            avatar = getAvatarAncestor();
+        }
 
         // Not sure how this can really happen, but alas it does. Better exit here than crashing.
         if( !avatar || !avatar->mDrawable )
@@ -1555,19 +1560,17 @@ bool LLVOVolume::calcLOD()
             radius = diag.magVec(); // preserve old BinRadius behavior - 2x off
             LL_DEBUGS("DynamicBox") << avatar->getDebugName() << " diag " << diag << " radius " << radius << LL_ENDL;
         }
-        if (distance <= 0.f || radius <= 0.f)
-        {
-            return false;
-        }
     }
     else
     {
         distance = mDrawable->mDistanceWRTCamera;
         radius = getVolume() ? getVolume()->mLODScaleBias.scaledVec(getScale()).length() : getScale().length();
-        if (distance <= 0.f || radius <= 0.f)
-        {
-            return false;
-        }
+    }
+
+    distance = secondViewMeshLODDistance(getID(), distance);
+    if (distance <= 0.f || radius <= 0.f)
+    {
+        return false;
     }
 
     //hold onto unmodified distance for debugging

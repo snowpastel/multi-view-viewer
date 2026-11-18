@@ -36,6 +36,9 @@
 #include "llxorcipher.h"
 #include "apr_base64.h"
 #include <vector>
+#include <memory>
+#include <cstdlib>
+#include <fstream>
 #include <ios>
 #include <llsdserialize.h>
 #include <openssl/pem.h>
@@ -65,6 +68,7 @@ ensure("Exception cert is incorrect for " str, valueCompareLLSD(except.getCertDa
 }
 
 extern bool _cert_hostname_wildcard_match(const std::string& hostname, const std::string& wildcard_string);
+extern LLDate cert_date_from_asn1_time(ASN1_TIME* asn1_time);
 
 //----------------------------------------------------------------------------
 // Mock objects for the dependencies of the code we're testing
@@ -1432,6 +1436,173 @@ namespace tut
                       validation_params);
 
         test_store->validate(0, test_chain, validation_params);
+    }
+
+
+    // Certificate dates may use either ASN.1 time representation, independent of year.
+    template<> template<>
+    void sechandler_basic_test_object::test<10>()
+    {
+        struct DateCase { int type; const char* encoded; const char* expected; };
+        const DateCase cases[] = {
+            {V_ASN1_UTCTIME, "240723114639Z", "2024-07-23T11:46:39Z"},
+            {V_ASN1_GENERALIZEDTIME, "20111006083956Z", "2011-10-06T08:39:56Z"},
+            {V_ASN1_GENERALIZEDTIME, "20461006083956Z", "2046-10-06T08:39:56Z"},
+            {V_ASN1_UTCTIME, "500101000000Z", "1950-01-01T00:00:00Z"},
+            {V_ASN1_UTCTIME, "691231235959Z", "1969-12-31T23:59:59Z"},
+            {V_ASN1_UTCTIME, "491231235959Z", "2049-12-31T23:59:59Z"},
+            {V_ASN1_GENERALIZEDTIME, "20500101000000Z", "2050-01-01T00:00:00Z"},
+            {V_ASN1_GENERALIZEDTIME, "20240229010203Z", "2024-02-29T01:02:03Z"}
+        };
+        for (const auto& entry : cases)
+        {
+            std::unique_ptr<ASN1_TIME, decltype(&ASN1_TIME_free)> time(
+                ASN1_STRING_type_new(entry.type), ASN1_TIME_free);
+            ensure("allocate ASN.1 time", time != nullptr);
+            ensure_equals("set encoded time", ASN1_STRING_set(time.get(), entry.encoded, -1), 1);
+            const LLDate converted = cert_date_from_asn1_time(time.get());
+            if (std::string(entry.expected) == "1950-01-01T00:00:00Z")
+                ensure_equals("1950 epoch seconds", converted.secondsSinceEpoch(), -631152000.0);
+            else if (std::string(entry.expected) == "1969-12-31T23:59:59Z")
+                ensure_equals("1969 epoch seconds", converted.secondsSinceEpoch(), -1.0);
+            else
+                ensure_equals(std::string("UTC conversion: ") + entry.encoded,
+                              converted.asString(), std::string(entry.expected));
+        }
+    }
+
+
+    template<> template<>
+    void sechandler_basic_test_object::test<11>()
+    {
+        bool rejected = false;
+        try { cert_date_from_asn1_time(nullptr); }
+        catch (const LLInvalidCertificate&) { rejected = true; }
+        ensure("null certificate time is rejected", rejected);
+
+        const char* invalid[] = {"", "2011100608", "20461306083956Z", "20230229083956Z"};
+        for (const char* encoded : invalid)
+        {
+            std::unique_ptr<ASN1_TIME, decltype(&ASN1_TIME_free)> time(
+                ASN1_STRING_type_new(V_ASN1_GENERALIZEDTIME), ASN1_TIME_free);
+            ensure("allocate invalid time fixture", time != nullptr);
+            ensure_equals("set invalid time fixture", ASN1_STRING_set(time.get(), encoded, -1), 1);
+            rejected = false;
+            try { cert_date_from_asn1_time(time.get()); }
+            catch (const LLInvalidCertificate&) { rejected = true; }
+            ensure(std::string("malformed time is rejected: ") + encoded, rejected);
+        }
+    }
+
+    template<> template<>
+    void sechandler_basic_test_object::test<12>()
+    {
+        // Exercise the certificate metadata and validation paths with Certum's dates.
+        std::unique_ptr<X509, decltype(&X509_free)> fixture(X509_dup(mX509ChildCert), X509_free);
+        std::unique_ptr<ASN1_TIME, decltype(&ASN1_TIME_free)> from(
+            ASN1_STRING_type_new(V_ASN1_GENERALIZEDTIME), ASN1_TIME_free);
+        std::unique_ptr<ASN1_TIME, decltype(&ASN1_TIME_free)> to(
+            ASN1_STRING_type_new(V_ASN1_GENERALIZEDTIME), ASN1_TIME_free);
+        ensure("allocate certificate date fixtures", fixture && from && to);
+        ensure_equals("set GeneralizedTime notBefore", ASN1_STRING_set(from.get(), "20111006083956Z", -1), 1);
+        ensure_equals("set GeneralizedTime notAfter", ASN1_STRING_set(to.get(), "20461006083956Z", -1), 1);
+        ensure_equals("assign notBefore", X509_set1_notBefore(fixture.get(), from.get()), 1);
+        ensure_equals("assign notAfter", X509_set1_notAfter(fixture.get(), to.get()), 1);
+        ensure("re-encode modified certificate dates", i2d_re_X509_tbs(fixture.get(), NULL) > 0);
+        LLPointer<LLCertificate> cert = new LLBasicCertificate(fixture.get());
+        LLSD info;
+        cert->getLLSD(info);
+        ensure_equals("metadata notBefore", info[CERT_VALID_FROM].asString(), "2011-10-06T08:39:56Z");
+        ensure_equals("metadata notAfter", info[CERT_VALID_TO].asString(), "2046-10-06T08:39:56Z");
+        LLPointer<LLBasicCertificateChain> chain = new LLBasicCertificateChain(NULL);
+        chain->add(cert);
+        LLPointer<LLBasicCertificateStore> store = new LLBasicCertificateStore("mycertstore.pem");
+        LLSD params;
+        params[CERT_VALIDATION_DATE] = LLDate("2026-11-11T00:00:00Z");
+        store->validate(VALIDATION_POLICY_TIME, chain, params);
+        params[CERT_VALIDATION_DATE] = LLDate("2011-10-06T08:39:55Z");
+        ensure_throws("GeneralizedTime not yet valid", LLCertValidationExpirationException, cert,
+                      store->validate, VALIDATION_POLICY_TIME, chain, params);
+        params[CERT_VALIDATION_DATE] = LLDate("2046-10-06T08:39:57Z");
+        ensure_throws("GeneralizedTime expired", LLCertValidationExpirationException, cert,
+                      store->validate, VALIDATION_POLICY_TIME, chain, params);
+    }
+
+    template<> template<>
+    void sechandler_basic_test_object::test<13>()
+    {
+        // The parser fix must not weaken the SSL policy's other rejection paths.
+        LLPointer<LLCertificate> root = new LLBasicCertificate(mX509RootCert);
+        LLPointer<LLCertificate> child = new LLBasicCertificate(mX509ChildCert);
+        LLPointer<LLBasicCertificateStore> store = new LLBasicCertificateStore("mycertstore.pem");
+        store->add(root);
+        LLPointer<LLBasicCertificateChain> chain = new LLBasicCertificateChain(NULL);
+        chain->add(child);
+        chain->add(new LLBasicCertificate(mX509IntermediateCert));
+        chain->add(root);
+        LLSD params;
+        params[CERT_VALIDATION_DATE] = LLDate("2026-11-11T00:00:00Z");
+        params[CERT_HOSTNAME] = "Integration Test Server Cert";
+        store->validate(VALIDATION_POLICY_SSL, chain, params);
+        params[CERT_HOSTNAME] = "unexpected.invalid";
+        ensure_throws("SSL hostname mismatch", LLCertValidationHostnameException, child,
+                      store->validate, VALIDATION_POLICY_SSL, chain, params);
+        params[CERT_HOSTNAME] = "Integration Test Server Cert";
+        LLPointer<LLBasicCertificateStore> untrusted = new LLBasicCertificateStore("mycertstore.pem");
+        ensure_throws("SSL untrusted root", LLCertValidationTrustException, root,
+                      untrusted->validate, VALIDATION_POLICY_SSL, chain, params);
+        std::unique_ptr<X509, decltype(&X509_free)> tampered(X509_dup(mX509ChildCert), X509_free);
+        ensure("allocate tampered signature fixture", tampered != nullptr);
+        ensure_equals("alter signed serial number", ASN1_INTEGER_set(X509_get_serialNumber(tampered.get()), 12345), 1);
+        ensure("re-encode altered signed content", i2d_re_X509_tbs(tampered.get(), NULL) > 0);
+        LLPointer<LLCertificate> altered = new LLBasicCertificate(tampered.get());
+        chain = new LLBasicCertificateChain(NULL);
+        chain->add(altered);
+        chain->add(new LLBasicCertificate(mX509IntermediateCert));
+        chain->add(root);
+        store->clearSertCache();
+        ensure_throws("SSL invalid signature", LLCertValidationInvalidSignatureException, altered,
+                      store->validate, VALIDATION_POLICY_SSL, chain, params);
+    }
+
+    template<> template<>
+    void sechandler_basic_test_object::test<14>()
+    {
+        // Audit an explicitly supplied bundle; ordinary runs use an isolated fixture.
+        // Never save() the input store: the deployed CA bundle is read-only input.
+        const char* bundle = std::getenv("PJ0225_CERT_AUDIT_BUNDLE");
+        const std::string filename = bundle && *bundle ? bundle : "mycertstore.pem";
+        if (!(bundle && *bundle))
+        {
+            std::ofstream output(filename.c_str());
+            output << mPemChildCert;
+            ensure("write isolated bundle fixture", output.good());
+        }
+        LLBasicCertificateStore store(filename);
+        std::unique_ptr<BIO, decltype(&BIO_free)> input(BIO_new_file(filename.c_str(), "r"), BIO_free);
+        ensure("open audit bundle read-only", input != nullptr);
+        int scanned = 0, accepted = 0, rejected = 0;
+        time_t now = time(NULL);
+        while (X509* raw = PEM_read_bio_X509(input.get(), NULL, NULL, NULL))
+        {
+            std::unique_ptr<X509, decltype(&X509_free)> cert(raw, X509_free);
+            const bool valid = X509_cmp_time(X509_get0_notBefore(cert.get()), &now) < 0 &&
+                               X509_cmp_time(X509_get0_notAfter(cert.get()), &now) > 0;
+            bool found = false;
+            for (auto iter = store.begin(); iter != store.end(); ++iter)
+            {
+                std::unique_ptr<X509, decltype(&X509_free)> stored((*iter)->getOpenSSLX509(), X509_free);
+                if (X509_cmp(stored.get(), cert.get()) == 0) { found = true; break; }
+            }
+            ensure_equals("store membership matches independent OpenSSL validity", found, valid);
+            ++scanned;
+            if (valid) ++accepted; else ++rejected;
+        }
+        ERR_clear_error(); // PEM reader reports end of input through the error queue.
+        ensure("bundle contains certificates", scanned > 0);
+        ensure_equals("store size matches valid input certificates", store.size(), accepted);
+        LL_INFOS("SECAPI") << "CA bundle audit: scanned=" << scanned << " accepted=" << accepted
+                           << " rejected=" << rejected << " file=" << filename << LL_ENDL;
     }
 
 };

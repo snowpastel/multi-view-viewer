@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<floater name="second_view" title="Second Camera" width="392" height="362"
+         layout="topleft" can_resize="true" can_minimize="true" min_width="220" min_height="160"
+         save_rect="false" save_visibility="false" single_instance="true" reuse_instance="true">
+    <button name="body" label="Full body" is_toggle="true" layout="topleft" follows="left|bottom"
+            left="8" top="312" width="70" height="22" />
+    <button name="face" label="Face" is_toggle="true" layout="topleft" follows="left|bottom"
+            left="82" top="312" width="48" height="22" />
+    <button name="reset" label="Reset" layout="topleft" follows="left|bottom"
+            left="138" top="312" width="72" height="22" />
+    <check_box name="sun_shadows" label="Sun / moon shadows" initial_value="true"
+               layout="topleft" follows="left|bottom" left="8" top="338" width="180" height="18" />
+</floater>

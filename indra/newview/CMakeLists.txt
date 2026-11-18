@@ -189,6 +189,7 @@ set(viewer_SOURCE_FILES
     llfilteredwearablelist.cpp
     llfirstuse.cpp
     llflexibleobject.cpp
+    llfloatersecondview.cpp
     llfloater360capture.cpp
     llfloaterabout.cpp
     llfloateravatarwelcomepack.cpp
@@ -873,6 +874,8 @@ set(viewer_HEADER_FILES
     llfilteredwearablelist.h
     llfirstuse.h
     llflexibleobject.h
+    llfloatersecondview.h
+    llsecondvieworbit.h
     llfloater360capture.h
     llfloaterabout.h
     llfloateravatarwelcomepack.h
@@ -2474,6 +2477,8 @@ if (LL_TESTS)
   LL_ADD_PROJECT_UNIT_TESTS(${VIEWER_BINARY_NAME} "${viewer_TEST_SOURCE_FILES}")
 
   #set(TEST_DEBUG on)
+  LL_ADD_INTEGRATION_TEST(llsecondvieworbit "" "${test_libs}")
+
   LL_ADD_INTEGRATION_TEST(cppfeatures
     ""
     "${test_libs}"

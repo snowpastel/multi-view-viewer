@@ -58,7 +58,7 @@ namespace tut
 
     struct llfile_test
     {
-        std::filesystem::path tempdir = LLFile::tmpdir();
+        std::filesystem::path tempdir = fsyspath(LLFile::tmpdir());
         std::filesystem::path testdir = get_testdir(tempdir);
     };
     typedef test_group<llfile_test> llfile_test_t;
@@ -258,9 +258,9 @@ namespace tut
         std::filesystem::path testdir_unicode = get_testdir_unicode(tempdir);
 
         // Unicode filename: "ファイル_テスト.bin" (means "file_test.bin" in Japanese)
-        std::string unicode_filename = "\xE3\x83\x95\xE3\x82\xA1\xE3\x82\xA4\xE3\x83\xAB_\xE3\x83\x86\xE3\x82\xB9\xE3\x83\x88.bin";
-        std::filesystem::path testfile_unicode = testdir_unicode;
-        testfile_unicode.append(unicode_filename);
+        const std::u8string unicode_filename = u8"\u30D5\u30A1\u30A4\u30EB_\u30C6\u30B9\u30C8.bin";
+        std::filesystem::path testfile_unicode = append_filename(testdir_unicode, unicode_filename);
+        ensure("Unicode filename should be preserved", testfile_unicode.filename().u8string() == unicode_filename);
 
         // Clean up any previous test artifacts
         clear_entire_dir(testdir_unicode);

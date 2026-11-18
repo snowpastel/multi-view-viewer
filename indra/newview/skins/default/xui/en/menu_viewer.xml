@@ -2587,6 +2587,10 @@ function="World.EnvPreset"
      name="Develop"
      tear_off="true"
      visible="false">
+        <menu_item_check name="Second Camera" label="Show Front View">
+            <menu_item_check.on_check function="Floater.Visible" parameter="second_view" />
+            <menu_item_check.on_click function="Floater.Toggle" parameter="second_view" />
+        </menu_item_check>
         <menu
          create_jump_keys="true"
          label="Consoles"

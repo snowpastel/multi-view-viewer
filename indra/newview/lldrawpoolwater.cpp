@@ -117,7 +117,7 @@ void LLDrawPoolWater::beginPostDeferredPass(S32 pass)
 
         LLRenderTarget& src = gPipeline.mRT->screen;
         LLRenderTarget& depth_src = gPipeline.mRT->deferredScreen;
-        LLRenderTarget& dst = gPipeline.mWaterDis;
+        LLRenderTarget& dst = gPipeline.waterDisplacementTarget();
 
         dst.bindTarget();
         gCopyDepthProgram.bind();
@@ -195,7 +195,7 @@ void LLDrawPoolWater::renderPostDeferred(S32 pass)
         shader = &gWaterProgram;
     }
 
-    gPipeline.bindDeferredShader(*shader, nullptr, &gPipeline.mWaterDis);
+    gPipeline.bindDeferredShader(*shader, nullptr, &gPipeline.waterDisplacementTarget());
 
     LLViewerTexture* tex_a = mWaterNormp[0];
     LLViewerTexture* tex_b = mWaterNormp[1];
@@ -222,13 +222,13 @@ void LLDrawPoolWater::renderPostDeferred(S32 pass)
         shader->bindTexture(LLViewerShaderMgr::BUMP_MAP2, tex_b);
     }
 
-    shader->bindTexture(LLShaderMgr::WATER_EXCLUSIONTEX, &gPipeline.mWaterExclusionMask);
+    shader->bindTexture(LLShaderMgr::WATER_EXCLUSIONTEX, &gPipeline.waterExclusionTarget());
 
     shader->uniform1f(LLShaderMgr::BLEND_FACTOR, blend_factor);
 
     F32      fog_density = pwater->getModifiedWaterFogDensity(underwater);
 
-    shader->bindTexture(LLShaderMgr::WATER_SCREENTEX, &gPipeline.mWaterDis);
+    shader->bindTexture(LLShaderMgr::WATER_SCREENTEX, &gPipeline.waterDisplacementTarget());
 
     if (mShaderLevel == 1)
     {

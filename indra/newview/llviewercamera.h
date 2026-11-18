@@ -55,6 +55,7 @@ public:
         CAMERA_SPOT_SHADOW1,
         CAMERA_WATER0,
         CAMERA_WATER1,
+        CAMERA_SECOND_VIEW,
         NUM_CAMERAS
     } eCameraID;
 

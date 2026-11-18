@@ -829,6 +829,79 @@ LLPipeline::eFBOStatus LLPipeline::doAllocateScreenBuffer(U32 resX, U32 resY)
     return ret;
 }
 
+static bool allocateSceneTargets(LLPipeline::RenderTargetPack& targets, U32 resX, U32 resY, bool hdr)
+{
+    //allocate deferred rendering color buffers
+    if (!targets.deferredScreen.allocate(resX, resY, GL_RGBA, true)) return false;
+    if (!addDeferredAttachments(targets.deferredScreen)) return false;
+
+    if (!targets.screen.allocate(resX, resY, GL_RGBA16F)) return false;
+
+    targets.deferredScreen.shareDepthBuffer(targets.screen);
+
+    if (hdr || LLPipeline::RenderShadowDetail > 0 || LLPipeline::RenderDeferredSSAO || LLPipeline::RenderDepthOfField)
+    {
+        if (!targets.deferredLight.allocate(resX, resY, hdr ? GL_RGBA16F : GL_RGBA)) return false;
+    }
+    else
+    {
+        targets.deferredLight.release();
+    }
+    return true;
+}
+
+void LLPipeline::prepareSecondViewShadows(const glm::mat4& inset_view, bool enabled)
+{
+    mSecondViewSunShadows = enabled && mMainShadowFrameValid;
+    if (!mMainShadowFrameValid)
+    {
+        std::fill_n(mSecondViewShadowMatrices, 6, glm::mat4(1.f));
+        return;
+    }
+    const glm::mat4 inset_to_main = mMainShadowView * glm::inverse(inset_view);
+    // This row maps a homogeneous inset position to main eye-space Z.
+    mSecondViewShadowDepth = glm::transpose(inset_to_main)[2];
+    for (S32 i = 0; i < 6; ++i)
+    {
+        mSecondViewShadowMatrices[i] = mMainShadowMatrices[i] * inset_to_main;
+    }
+}
+
+bool LLPipeline::ensureSecondViewTargets(U32 width, U32 height)
+{
+    if (mSecondViewImage.isComplete())
+    {
+        if (mSecondViewImage.getWidth() == width && mSecondViewImage.getHeight() == height)
+        {
+            return true;
+        }
+        // Detach the screen from the old shared depth before releasing its owner.
+        releaseSecondViewTargets();
+    }
+    bool hdr = gGLManager.mGLVersion > 4.05f && gSavedSettings.getBOOL("RenderHDREnabled");
+    if (!allocateSceneTargets(mSecondViewRT, width, height, hdr) ||
+        !mSecondViewWaterDis.allocate(width, height, hdr ? GL_RGBA16F : GL_RGBA, true) ||
+        !mSecondViewWaterMask.allocate(width, height, GL_R8, true) ||
+        !mSecondViewImage.allocate(width, height, GL_RGBA8))
+    {
+        releaseSecondViewTargets();
+        return false;
+    }
+    mSecondViewRT.width = width;
+    mSecondViewRT.height = height;
+    return true;
+}
+
+void LLPipeline::releaseSecondViewTargets()
+{
+    mSecondViewImage.release();
+    mSecondViewWaterDis.release();
+    mSecondViewWaterMask.release();
+    mSecondViewRT.screen.release();
+    mSecondViewRT.deferredScreen.release();
+    mSecondViewRT.deferredLight.release();
+}
+
 bool LLPipeline::allocateScreenBufferInternal(U32 resX, U32 resY)
 {
     LL_PROFILE_ZONE_SCOPED_CATEGORY_DISPLAY;
@@ -873,27 +946,8 @@ bool LLPipeline::allocateScreenBufferInternal(U32 resX, U32 resY)
         resY /= res_mod;
     }
 
-    S32 shadow_detail = RenderShadowDetail;
-    bool ssao = RenderDeferredSSAO;
-
-    //allocate deferred rendering color buffers
-    if (!mRT->deferredScreen.allocate(resX, resY, GL_RGBA, true)) return false;
-    if (!addDeferredAttachments(mRT->deferredScreen)) return false;
-
     GLuint screenFormat = hdr ? GL_RGBA16F : GL_RGBA;
-
-    if (!mRT->screen.allocate(resX, resY, GL_RGBA16F)) return false;
-
-    mRT->deferredScreen.shareDepthBuffer(mRT->screen);
-
-    if (hdr || shadow_detail > 0 || ssao || RenderDepthOfField)
-    { //only need mRT->deferredLight for hdr OR shadows OR ssao OR dof
-        if (!mRT->deferredLight.allocate(resX, resY, screenFormat)) return false;
-    }
-    else
-    {
-        mRT->deferredLight.release();
-    }
+    if (!allocateSceneTargets(*mRT, resX, resY, hdr)) return false;
 
     allocateShadowBuffer(resX, resY);
 
@@ -971,6 +1025,10 @@ inline U32 BlurHappySize(U32 x, F32 scale) { return U32( x * scale + 16.0f) & ~0
 
 bool LLPipeline::allocateShadowBuffer(U32 resX, U32 resY)
 {
+    if (mRT == &mMainRT)
+    {
+        mMainShadowFrameValid = false;
+    }
     LL_PROFILE_ZONE_SCOPED_CATEGORY_DISPLAY;
     S32 shadow_detail = RenderShadowDetail;
 
@@ -1261,6 +1319,7 @@ void LLPipeline::releaseShadowBuffers()
 
 void LLPipeline::releaseScreenBuffers()
 {
+    releaseSecondViewTargets();
     mRT->screen.release();
     mRT->deferredScreen.release();
     mRT->deferredLight.release();
@@ -1276,6 +1335,10 @@ void LLPipeline::releaseScreenBuffers()
 
 void LLPipeline::releaseSunShadowTarget(U32 index)
 {
+    if (mRT == &mMainRT)
+    {
+        mMainShadowFrameValid = false;
+    }
     llassert(index < 4);
     mRT->shadow[index].release();
 }
@@ -8342,18 +8405,18 @@ void LLPipeline::bindDeferredShader(LLGLSLShader& shader, LLRenderTarget* light_
 
     stop_glerror();
 
-    F32 mat[16*6];
-    for (U32 i = 0; i < 16; i++)
-    {
-        mat[i] = glm::value_ptr(mSunShadowMatrix[0])[i];
-        mat[i+16] = glm::value_ptr(mSunShadowMatrix[1])[i];
-        mat[i+32] = glm::value_ptr(mSunShadowMatrix[2])[i];
-        mat[i+48] = glm::value_ptr(mSunShadowMatrix[3])[i];
-        mat[i+64] = glm::value_ptr(mSunShadowMatrix[4])[i];
-        mat[i+80] = glm::value_ptr(mSunShadowMatrix[5])[i];
-    }
+    const bool inset = mRT == &mSecondViewRT;
+    const glm::mat4* matrices = inset ? mSecondViewShadowMatrices : mSunShadowMatrix;
+    shader.uniformMatrix4fv(LLShaderMgr::DEFERRED_SHADOW_MATRIX, 6, false, glm::value_ptr(matrices[0]));
 
-    shader.uniformMatrix4fv(LLShaderMgr::DEFERRED_SHADOW_MATRIX, 6, false, mat);
+    static const LLStaticHashedString shadow_mode("inset_sun_shadow_mode");
+    static const LLStaticHashedString shadow_depth("inset_sun_shadow_depth");
+    // 0: normal pass, 1: borrowed main cascades, 2: inset without directional shadows.
+    shader.uniform1i(shadow_mode, inset ? (mSecondViewSunShadows ? 1 : 2) : 0);
+    if (inset && mSecondViewSunShadows)
+    {
+        shader.uniform4fv(shadow_depth, 1, glm::value_ptr(mSecondViewShadowDepth));
+    }
 
     stop_glerror();
 
@@ -8387,7 +8450,7 @@ void LLPipeline::bindDeferredShader(LLGLSLShader& shader, LLRenderTarget* light_
     }
     else*/
     {
-        shader.uniform4fv(LLShaderMgr::DEFERRED_SHADOW_CLIP, 1, mSunClipPlanes.mV);
+        shader.uniform4fv(LLShaderMgr::DEFERRED_SHADOW_CLIP, 1, inset && mMainShadowFrameValid ? mMainShadowSplits.mV : mSunClipPlanes.mV);
     }
     shader.uniform1f(LLShaderMgr::DEFERRED_SUN_WASH, RenderDeferredSunWash);
     shader.uniform1f(LLShaderMgr::DEFERRED_SHADOW_NOISE, RenderShadowNoise);
@@ -8423,7 +8486,7 @@ void LLPipeline::bindDeferredShader(LLGLSLShader& shader, LLRenderTarget* light_
 
     shader.uniform3fv(LLShaderMgr::DEFERRED_SUN_DIR, 1, mTransformedSunDir.mV);
     shader.uniform3fv(LLShaderMgr::DEFERRED_MOON_DIR, 1, mTransformedMoonDir.mV);
-    shader.uniform2f(LLShaderMgr::DEFERRED_SHADOW_RES, (GLfloat)mRT->shadow[0].getWidth(), (GLfloat)mRT->shadow[0].getHeight());
+    shader.uniform2f(LLShaderMgr::DEFERRED_SHADOW_RES, (GLfloat)getSunShadowTarget(0)->getWidth(), (GLfloat)getSunShadowTarget(0)->getHeight());
     shader.uniform2f(LLShaderMgr::DEFERRED_PROJ_SHADOW_RES, (GLfloat)mSpotShadow[0].getWidth(), (GLfloat)mSpotShadow[0].getHeight());
     shader.uniform1f(LLShaderMgr::DEFERRED_DEPTH_CUTOFF, RenderEdgeDepthCutoff);
     shader.uniform1f(LLShaderMgr::DEFERRED_NORM_CUTOFF, RenderEdgeNormCutoff);
@@ -8664,7 +8727,7 @@ void LLPipeline::renderDeferredLighting()
             LLDrawable::drawable_list_t fullscreen_spot_lights;
             LLSettingsSky::ptr_t        psky        = LLEnvironment::instance().getCurrentSky();
 
-            if (!gCubeSnapshot)
+            if (!gCubeSnapshot && mRT != &mSecondViewRT)
             {
                 for (U32 i = 0; i < 2; i++)
                 {
@@ -8981,7 +9044,7 @@ void LLPipeline::doAtmospherics()
 
             LLRenderTarget& src = gPipeline.mRT->screen;
             LLRenderTarget& depth_src = gPipeline.mRT->deferredScreen;
-            LLRenderTarget& dst = gPipeline.mWaterDis;
+            LLRenderTarget& dst = waterDisplacementTarget();
 
             mRT->screen.flush();
             dst.bindTarget();
@@ -9009,7 +9072,7 @@ void LLPipeline::doAtmospherics()
         LLGLSLShader& haze_shader = gHazeProgram;
 
         LL_PROFILE_GPU_ZONE("haze");
-        bindDeferredShader(haze_shader, nullptr, &mWaterDis);
+        bindDeferredShader(haze_shader, nullptr, &waterDisplacementTarget());
 
         LLEnvironment& environment = LLEnvironment::instance();
         haze_shader.uniform1i(LLShaderMgr::SUN_UP_FACTOR, environment.getIsSunUp() ? 1 : 0);
@@ -9045,7 +9108,7 @@ void LLPipeline::doWaterHaze()
 
             LLRenderTarget& src = gPipeline.mRT->screen;
             LLRenderTarget& depth_src = gPipeline.mRT->deferredScreen;
-            LLRenderTarget& dst = gPipeline.mWaterDis;
+            LLRenderTarget& dst = waterDisplacementTarget();
 
             mRT->screen.flush();
             dst.bindTarget();
@@ -9074,14 +9137,14 @@ void LLPipeline::doWaterHaze()
         LLGLSLShader& haze_shader = gHazeWaterProgram;
 
         LL_PROFILE_GPU_ZONE("haze");
-        bindDeferredShader(haze_shader, nullptr, &mWaterDis);
+        bindDeferredShader(haze_shader, nullptr, &waterDisplacementTarget());
 
         haze_shader.uniform4fv(LLShaderMgr::WATER_WATERPLANE, 1, LLDrawPoolAlpha::sWaterPlane.mV);
 
         static LLStaticHashedString above_water_str("above_water");
         haze_shader.uniform1i(above_water_str, sUnderWaterRender ? -1 : 1);
 
-        haze_shader.bindTexture(LLShaderMgr::WATER_EXCLUSIONTEX, &mWaterExclusionMask);
+        haze_shader.bindTexture(LLShaderMgr::WATER_EXCLUSIONTEX, &waterExclusionTarget());
 
         if (LLPipeline::sUnderWaterRender)
         {
@@ -9115,12 +9178,12 @@ void LLPipeline::doWaterHaze()
 
 void LLPipeline::doWaterExclusionMask()
 {
-    mWaterExclusionMask.bindTarget();
+    waterExclusionTarget().bindTarget();
     glClearColor(1, 1, 1, 1);
-    mWaterExclusionMask.clear();
+    waterExclusionTarget().clear();
     mWaterExclusionPool->render();
 
-    mWaterExclusionMask.flush();
+    waterExclusionTarget().flush();
     glClearColor(0, 0, 0, 0);
 }
 
@@ -9217,7 +9280,7 @@ void LLPipeline::setupSpotLight(LLGLSLShader& shader, LLDrawable* drawablep)
     // make sure we're not already targeting the same spot light with both shadow maps
     llassert(mTargetShadowSpotLight[0] != mTargetShadowSpotLight[1] || mTargetShadowSpotLight[0].isNull());
 
-    if (!gCubeSnapshot)
+    if (!gCubeSnapshot && mRT != &mSecondViewRT)
     {
         LLDrawable* potential = drawablep;
         //determine if this light is higher priority than one of the existing spot shadows
@@ -9881,7 +9944,8 @@ void LLPipeline::renderHighlight(const LLViewerObject* obj, F32 fade)
 LLRenderTarget* LLPipeline::getSunShadowTarget(U32 i)
 {
     llassert(i < 4);
-    return &mRT->shadow[i];
+    // The inset samples the shadows computed by the main camera.
+    return mRT == &mSecondViewRT ? &mMainRT.shadow[i] : &mRT->shadow[i];
 }
 
 LLRenderTarget* LLPipeline::getSpotShadowTarget(U32 i)
@@ -9913,6 +9977,12 @@ public:
 
 void LLPipeline::generateSunShadow(LLCamera& camera)
 {
+    const bool main_frame = mRT == &mMainRT && !gCubeSnapshot;
+    if (main_frame)
+    {
+        mMainShadowFrameValid = false;
+    }
+
     if (!sRenderDeferred || RenderShadowDetail <= 0)
     {
         return;
@@ -10687,6 +10757,14 @@ void LLPipeline::generateSunShadow(LLCamera& camera)
 
     set_last_modelview(last_modelview);
     set_last_projection(last_projection);
+
+    if (main_frame)
+    {
+        mMainShadowView = saved_view;
+        std::copy_n(mSunShadowMatrix, 6, mMainShadowMatrices);
+        mMainShadowSplits = mSunClipPlanes;
+        mMainShadowFrameValid = true;
+    }
 
     popRenderTypeMask();
 

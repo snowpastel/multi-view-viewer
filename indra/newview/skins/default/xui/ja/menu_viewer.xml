@@ -296,6 +296,7 @@
 		<menu_item_check label="開発メニューを表示" name="Debug Mode"/>
 	</menu>
 	<menu label="開発" name="Develop">
+		<menu_item_check name="Second Camera" label="正面ビューを表示"/>
 		<menu label="コンソール" name="Consoles">
 			<menu_item_check label="テクスチャのコンソール" name="Texture Console"/>
 			<menu_item_check label="デバッグコンソール" name="Debug Console"/>

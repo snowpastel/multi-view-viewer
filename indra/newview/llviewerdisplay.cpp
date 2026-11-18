@@ -45,6 +45,13 @@
 #include "llfasttimer.h"
 #include "llfeaturemanager.h"
 #include "llfloatertools.h"
+#include "llfloatersecondview.h"
+#include "llsecondviewpass.h"
+#include "llsecondviewlod.h"
+#include "llmodel.h"
+#include "llviewerjointattachment.h"
+#include "llvovolume.h"
+#include "llfloaterreg.h"
 #include "llfocusmgr.h"
 #include "llgl.h"
 #include "llglheaders.h"
@@ -135,6 +142,7 @@ void render_hud_attachments();
 void render_ui_3d();
 void render_ui_2d();
 void render_disconnected_background();
+static void renderSecondView();
 
 void getProfileStatsContext(boost::json::object& stats);
 std::string getProfileStatsFilename();
@@ -723,6 +731,11 @@ void display(bool rebuild, F32 zoom_factor, int subfield, bool for_snapshot)
             gPipeline.mHeroProbeManager.renderProbes();
         }
 
+        if (!for_snapshot && !gSnapshot && !gCubeSnapshot)
+        {
+            renderSecondView();
+        }
+
         LL_PROFILE_ZONE_NAMED_CATEGORY_DISPLAY("display - 1");
         LLAppViewer::instance()->pingMainloopTimeout("Display:Update");
         if (gPipeline.hasRenderType(LLPipeline::RENDER_TYPE_HUD))
@@ -1149,8 +1162,8 @@ std::string getProfileStatsFilename()
     return name;
 }
 
-// WIP simplified copy of display() that does minimal work
-void display_cube_face()
+// Scene-only pass shared by cube faces and the interactive second camera.
+static void renderAuxiliaryWorld(LLViewerCamera::eCameraID camera_id, LLCullResult& result)
 {
     LL_PROFILE_ZONE_NAMED_CATEGORY_DISPLAY("Render Cube Face");
     LL_PROFILE_GPU_ZONE("display cube face");
@@ -1172,7 +1185,6 @@ void display_cube_face()
 
     gPipeline.mBackfaceCull = true;
 
-    gViewerWindow->setup3DViewport();
 
     if (gPipeline.hasRenderType(LLPipeline::RENDER_TYPE_HUD))
     { //don't draw hud objects in this frame
@@ -1184,7 +1196,16 @@ void display_cube_face()
         gPipeline.toggleRenderType(LLPipeline::RENDER_TYPE_HUD_PARTICLES);
     }
 
-    display_update_camera();
+    LLViewerCamera& camera = LLViewerCamera::instance();
+    if (camera_id == LLViewerCamera::CAMERA_SECOND_VIEW)
+    {
+        camera.setPerspective(false, 0, 0, gPipeline.mRT->width, gPipeline.mRT->height,
+                              false, camera.getNear(), MAX_FAR_CLIP * 2.f);
+    }
+    else
+    {
+        display_update_camera();
+    }
 
     {
         LL_PROFILE_ZONE_NAMED_CATEGORY_DISPLAY("Env Update");
@@ -1198,20 +1219,21 @@ void display_cube_face()
     LLPipeline::sUseOcclusion = 0; // occlusion data is from main camera point of view, don't read or write it during cube snapshots
     //gDepthDirty = true; //let "real" render pipe know it can't trust the depth buffer for occlusion data
 
-    static LLCullResult result;
-    LLViewerCamera::sCurCameraID = LLViewerCamera::CAMERA_WORLD;
+    LLViewerCamera::sCurCameraID = camera_id;
     LLPipeline::sUnderWaterRender = LLViewerCamera::getInstance()->cameraUnderWater();
     gPipeline.updateCull(*LLViewerCamera::getInstance(), result);
 
     gGL.setColorMask(true, true);
 
     glClearColor(0.f, 0.f, 0.f, 0.f);
-    gPipeline.generateSunShadow(*LLViewerCamera::getInstance());
-
-    glClear(GL_DEPTH_BUFFER_BIT); // | GL_STENCIL_BUFFER_BIT);
+    if (camera_id != LLViewerCamera::CAMERA_SECOND_VIEW)
+    {
+        gPipeline.generateSunShadow(camera);
+        glClear(GL_DEPTH_BUFFER_BIT);
+    }
 
     {
-        LLViewerCamera::sCurCameraID = LLViewerCamera::CAMERA_WORLD;
+        LLViewerCamera::sCurCameraID = camera_id;
         gPipeline.stateSort(*LLViewerCamera::getInstance(), result);
 
         if (rebuild)
@@ -1245,7 +1267,7 @@ void display_cube_face()
     }
     gPipeline.mRT->deferredScreen.clear();
 
-    LLViewerCamera::sCurCameraID = LLViewerCamera::CAMERA_WORLD;
+    LLViewerCamera::sCurCameraID = camera_id;
 
     gPipeline.renderGeomDeferred(*LLViewerCamera::getInstance());
 
@@ -1260,6 +1282,183 @@ void display_cube_face()
 
     LLSpatialGroup::sNoDelete = false;
     gPipeline.clearReferences();
+}
+
+// Render to a private scene target before the main visibility pass.
+static LLSecondViewLOD sSecondViewLOD;
+
+F32 secondViewMeshLODDistance(const LLUUID& id, F32 main_distance)
+{
+    return sSecondViewLOD.distanceFor(id, main_distance);
+}
+
+bool LLSecondViewLOD::isHeadJoint(LLJoint* joint, const LLJoint* head)
+{
+    for (; joint; joint = joint->getParent())
+    {
+        if (joint == head)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool isFaceMesh(LLVOVolume& volume, LLVOAvatar& avatar)
+{
+    if (!volume.isRiggedMesh())
+    {
+        // A linked child's attachment point is stored on the linkset root.
+        return LLSecondViewLOD::isHeadJoint(avatar.getTargetAttachmentPoint(volume.getRootEdit()), avatar.mHeadp);
+    }
+
+    auto& weights = volume.mJointRiggingInfoTab;
+    if (!weights.size())
+    {
+        volume.updateRiggingInfo();
+    }
+    for (S32 joint = 0; joint < weights.size(); ++joint)
+    {
+        if (weights[joint].isRiggedTo() && LLSecondViewLOD::isHeadJoint(avatar.getJoint(joint), avatar.mHeadp))
+        {
+            return true;
+        }
+    }
+    // A streamed mesh can have its skin before the first weighted faces.
+    if (!weights.size())
+    {
+        for (const auto& name : volume.getSkinInfo()->mJointNames)
+        {
+            if (LLSecondViewLOD::isHeadJoint(avatar.getJoint(name), avatar.mHeadp))
+            {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static void updateSecondViewLOD(const LLVector3* eye)
+{
+    LLSecondViewLOD::Requests requests;
+    if (eye)
+    {
+        // Walk the worn objects even when the main camera cannot see self.
+        std::vector<LLVOVolume*> volumes;
+        gAgentAvatarp->getAssociatedVolumes(volumes);
+        for (LLVOVolume* volume : volumes)
+        {
+            // Attachment state belongs to the root; a child can have state zero.
+            LLViewerObject* root = volume->getRootEdit();
+            if (!volume->getVolume() || !volume->isMesh() || root->isHUDAttachment() ||
+                volume->mDrawable.isNull() || root->isAnimatedObject() || root->getAvatar() != gAgentAvatarp.get() ||
+                !isFaceMesh(*volume, *gAgentAvatarp))
+            {
+                continue;
+            }
+            // A rigged drawable's origin can be at the pelvis even for eyes.
+            const LLVector3 center = volume->isRiggedMesh() ? gAgentAvatarp->mHeadp->getWorldPosition()
+                                                           : volume->getRenderPosition();
+            const F32 distance = (center - *eye).length();
+            if (std::isfinite(distance))
+            {
+                requests.emplace(volume->getID(), llmax(0.01f, distance));
+            }
+        }
+    }
+    sSecondViewLOD.replace(std::move(requests), [](const LLUUID& id)
+    {
+        LLViewerObject* object = gObjectList.findObject(id);
+        if (object && !object->isDead() && object->getPCode() == LL_PCODE_VOLUME && object->getVolume())
+        {
+            object->updateLOD();
+        }
+    });
+}
+
+static void renderSecondView()
+{
+    auto* floater = LLFloaterReg::findTypedInstance<LLFloaterSecondView>("second_view");
+    if (!floater || !floater->isInVisibleChain() || floater->isMinimized() ||
+        !isAgentAvatarValid() || gTeleportDisplay || gRestoreGL || gResizeScreenTexture ||
+        LLStartUp::getStartupState() < STATE_STARTED || LLAppViewer::instance()->logoutRequestSent() ||
+        gPipeline.mRT != &gPipeline.mMainRT || !gPipeline.mRT->deferredScreen.isComplete())
+    {
+        updateSecondViewLOD(nullptr);
+        return;
+    }
+
+    LLRenderTarget& image = gPipeline.mSecondViewImage;
+    if (!floater->updateRenderTarget())
+    {
+        floater->closeFloater();
+        updateSecondViewLOD(nullptr);
+        return;
+    }
+
+    LLViewerCamera& camera = LLViewerCamera::instance();
+    const LLViewerCamera main_camera = camera;
+    const bool underwater = LLPipeline::sUnderWaterRender;
+    const glm::mat4 last_model = glm::make_mat4(gGLLastModelView);
+    const glm::mat4 last_proj = glm::make_mat4(gGLLastProjection);
+
+    const LLVector3 forward = LLVector3::x_axis * gAgentAvatarp->getRenderRotation();
+    const F32 heading = atan2f(forward.mV[VY], forward.mV[VX]);
+    const LLSecondViewFraming& framing = floater->framing();
+    LLVector3 head;
+    const LLVector3* face_anchor = nullptr;
+    if (framing.faceSelected() && gAgentAvatarp->isBuilt() && gAgentAvatarp->mHeadp)
+    {
+        // The same eye-area offset used by the Viewer's first-person camera.
+        head = gAgentAvatarp->mHeadp->getWorldPosition() +
+            LLVector3(0.08f, 0.f, 0.05f) * gAgentAvatarp->mHeadp->getWorldRotation();
+        if (head.isFinite())
+        {
+            face_anchor = &head;
+            camera.setNear(MIN_NEAR_PLANE);
+        }
+    }
+    LLVector3 eye, focus;
+    framing.compose(heading, gAgentAvatarp->getRenderPosition(), face_anchor, eye, focus);
+    updateSecondViewLOD(face_anchor ? &eye : nullptr);
+    camera.setAspect(floater->imageAspect());
+    camera.setViewNoBroadcast(main_camera.getDefaultFOV());
+    camera.setZoomParameters(1.f, 0);
+    camera.lookAt(eye, focus, LLVector3::z_axis);
+
+    gPipeline.pushRenderTypeMask();
+    static LLCullResult second_view_cull;
+    GLfloat transform[16];
+    camera.getOpenGLTransform(transform);
+    const glm::mat4 inset_view = glm::make_mat4(OGL_TO_CFR_ROTATION) * glm::make_mat4(transform);
+    gPipeline.prepareSecondViewShadows(inset_view, floater->sunShadowsEnabled());
+    {
+        LLSecondViewPass pass;
+        renderAuxiliaryWorld(LLViewerCamera::sCurCameraID, second_view_cull);
+        LLGLDisable blend(GL_BLEND);
+        LLGLDisable cull(GL_CULL_FACE);
+        if (gGLManager.mGLVersion > 4.05f && gSavedSettings.getBOOL("RenderHDREnabled"))
+        {
+            gPipeline.tonemap(&gPipeline.mRT->screen, &image, true);
+        }
+        else
+        {
+            gPipeline.gammaCorrect(&gPipeline.mRT->screen, &image);
+        }
+    }
+    gPipeline.popRenderTypeMask();
+    gPipeline.resetDrawOrders();
+    std::copy_n(glm::value_ptr(last_model), 16, gGLLastModelView);
+    std::copy_n(glm::value_ptr(last_proj), 16, gGLLastProjection);
+    camera = main_camera;
+    LLPipeline::sUnderWaterRender = underwater;
+    gViewerWindow->setup3DRender();
+}
+
+void display_cube_face()
+{
+    static LLCullResult cube_cull;
+    renderAuxiliaryWorld(LLViewerCamera::CAMERA_WORLD, cube_cull);
 }
 
 void render_hud_attachments()

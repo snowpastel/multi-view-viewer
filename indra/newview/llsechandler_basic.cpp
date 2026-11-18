@@ -440,33 +440,27 @@ std::string cert_string_from_asn1_string(ASN1_STRING* value)
 // validity checking.
 LLDate cert_date_from_asn1_time(ASN1_TIME* asn1_time)
 {
-
-    struct tm timestruct = {0};
-    int i = asn1_time->length;
-
-    if (i < 10)
+    if (!asn1_time)
     {
-        return LLDate();
+        LLTHROW(LLInvalidCertificate(LLSD::emptyMap()));
     }
-    // convert the date from the ASN1 time (which is a string in ZULU time), to
-    // a timeval.
-    timestruct.tm_year = (asn1_time->data[0]-'0') * 10 + (asn1_time->data[1]-'0');
 
-    /* Deal with Year 2000 */
-    if (timestruct.tm_year < 70)
-        timestruct.tm_year += 100;
-
-    timestruct.tm_mon = (asn1_time->data[2]-'0') * 10 + (asn1_time->data[3]-'0') - 1;
-    timestruct.tm_mday = (asn1_time->data[4]-'0') * 10 + (asn1_time->data[5]-'0');
-    timestruct.tm_hour = (asn1_time->data[6]-'0') * 10 + (asn1_time->data[7]-'0');
-    timestruct.tm_min = (asn1_time->data[8]-'0') * 10 + (asn1_time->data[9]-'0');
-    timestruct.tm_sec = (asn1_time->data[10]-'0') * 10 + (asn1_time->data[11]-'0');
-
-#if LL_WINDOWS
-    return LLDate((F64)_mkgmtime(&timestruct));
-#else // LL_WINDOWS
-    return LLDate((F64)timegm(&timestruct));
-#endif // LL_WINDOWS
+    ASN1_TIME* epoch = ASN1_TIME_new();
+    if (!epoch)
+    {
+        LLTHROW(LLAllocationCertException(LLSD::emptyMap()));
+    }
+    int days = 0, seconds = 0;
+    // OpenSSL handles both ASN.1 formats and UTC, including dates before 1970.
+    // Derive epoch seconds directly to avoid platform CRT/APR date limits.
+    const bool converted = ASN1_TIME_set_string(epoch, "700101000000Z") == 1 &&
+                           ASN1_TIME_diff(&days, &seconds, epoch, asn1_time) == 1;
+    ASN1_TIME_free(epoch);
+    if (!converted)
+    {
+        LLTHROW(LLInvalidCertificate(LLSD::emptyMap()));
+    }
+    return LLDate(static_cast<F64>(days) * 86400.0 + static_cast<F64>(seconds));
 }
 
 // class LLBasicCertificateVector
