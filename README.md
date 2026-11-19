@@ -1,5 +1,9 @@
 # SnowPastel Multi-View Viewer
 
+**[Windows試用版 26.4.0.7 をダウンロード（ZIP・約264 MiB）](https://github.com/snowpastel/multi-view-viewer/releases/download/v26.4.0.7/SnowPastel-Multi-View-26.4.0.7-win64.zip)**
+
+Windows x64用です。ZIPをすべて展開し、**「試用版を起動.cmd」** をダブルクリックしてください。設定とキャッシュは展開先の「試用データ」に保存されます。
+
 Second Lifeの公式Viewerをベースにした、SnowPastelの2画面表示実験です。メイン画面で後ろ姿を見ながら、小窓で正面の前髪や服装を確認できます。
 
 ![メイド服のアバターを、メイン画面に後ろから、第2カメラの小窓に正面から同時に映した様子](front-and-back-view.png)
