@@ -11,6 +11,7 @@ class LLFloaterSecondView final : public LLFloater
 public:
     explicit LLFloaterSecondView(const LLSD& key) : LLFloater(key) {}
     bool postBuild() override;
+    static bool isSecondViewActive();
     bool sunShadowsEnabled() const;
     void onOpen(const LLSD& key) override;
     void onClose(bool app_quitting) override;

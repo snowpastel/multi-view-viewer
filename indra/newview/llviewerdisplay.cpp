@@ -25,6 +25,7 @@
  */
 
 #include "llviewerprecompiledheaders.h"
+#include "llsecondviewtrace.h"
 
 #include "llviewerdisplay.h"
 
@@ -1384,6 +1385,7 @@ static void renderSecondView()
         LLStartUp::getStartupState() < STATE_STARTED || LLAppViewer::instance()->logoutRequestSent() ||
         gPipeline.mRT != &gPipeline.mMainRT || !gPipeline.mRT->deferredScreen.isComplete())
     {
+        LLSecondViewTrace::stop();
         updateSecondViewLOD(nullptr);
         return;
     }
@@ -1392,6 +1394,7 @@ static void renderSecondView()
     if (!floater->updateRenderTarget())
     {
         floater->closeFloater();
+        LLSecondViewTrace::stop();
         updateSecondViewLOD(nullptr);
         return;
     }
@@ -1435,6 +1438,7 @@ static void renderSecondView()
     {
         LLSecondViewPass pass;
         renderAuxiliaryWorld(LLViewerCamera::sCurCameraID, second_view_cull);
+        LLSecondViewTrace::sample(*gAgentAvatarp, main_camera, face_anchor != nullptr);
         LLGLDisable blend(GL_BLEND);
         LLGLDisable cull(GL_CULL_FACE);
         if (gGLManager.mGLVersion > 4.05f && gSavedSettings.getBOOL("RenderHDREnabled"))

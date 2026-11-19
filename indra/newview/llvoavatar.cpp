@@ -25,6 +25,9 @@
  */
 
 #include "llviewerprecompiledheaders.h"
+#include "llfloatersecondview.h"
+#include "llsecondviewattachment.h"
+#include "llsecondviewtrace.h"
 
 #include "llvoavatar.h"
 
@@ -3027,6 +3030,36 @@ static void override_bbox(LLDrawable* drawable, LLVector4a* extents)
     drawable->movePartition();
 }
 
+// Mixed linksets share a root transform. A rigged sibling does not make a
+// rigid decoration independent of that transform.
+static bool hasRigidDrawable(const LLViewerObject& object)
+{
+    if (object.isDead()) return false;
+    if (object.mDrawable && !object.mDrawable->isState(LLDrawable::RIGGED) && !object.isRiggedMesh())
+        return true;
+    for (const auto& child : object.getChildren())
+    {
+        if (child && hasRigidDrawable(*child)) return true;
+    }
+    return false;
+}
+
+bool LLSecondViewAttachment::requestMove(bool normal_move, bool follow_point,
+                                         LLJoint& joint, const LLViewerObject& root)
+{
+    if (normal_move)
+    {
+        return true;
+    }
+    if (!follow_point || root.isAnimatedObject() || !hasRigidDrawable(root))
+    {
+        return false;
+    }
+    // A rigid drawable reads its parent's cached pose in LLDrawable::updateXform.
+    joint.updateWorldMatrixParent();
+    return true;
+}
+
 void LLVOAvatar::idleUpdateMisc(bool detailed_update)
 {
     LL_PROFILE_ZONE_SCOPED_CATEGORY_AVATAR;
@@ -3038,15 +3071,23 @@ void LLVOAvatar::idleUpdateMisc(bool detailed_update)
     LLJoint::sNumUpdates = 0;
     LLJoint::sNumTouches = 0;
 
-    bool visible = isVisible() || mNeedsAnimUpdate;
+    const bool avatar_visible = isVisible();
+    const bool visible = avatar_visible || mNeedsAnimUpdate;
+    if (isSelf()) LLSecondViewTrace::idle(detailed_update, avatar_visible, mNeedsAnimUpdate);
 
-    // update attachments positions
-    if (detailed_update)
+    const bool inset_follow = (!detailed_update || !visible) && isSelf() && isBuilt() &&
+                              LLFloaterSecondView::isSecondViewActive();
+    if (detailed_update || inset_follow)
     {
         U32 draw_order = 0;
         bool attachment_selected = LLSelectMgr::getInstance()->getSelection()->getObjectCount() > 0 && LLSelectMgr::getInstance()->getSelection()->isAttachment();
         for (const auto& [attachment_point_id, attachment] : mAttachmentPoints)
         {
+            const bool follow_point = LLSecondViewAttachment::followPoint(inset_follow, attachment->getIsHUDAttachment());
+            if (!detailed_update && !follow_point)
+            {
+                continue;
+            }
             for (auto& attached_object : attachment->mAttachedObjects)
             {
                 if (attached_object.isNull()
@@ -3059,11 +3100,16 @@ void LLVOAvatar::idleUpdateMisc(bool detailed_update)
 
                 LLSpatialBridge* bridge = attached_object->mDrawable->getSpatialBridge();
 
-                if (visible || !(bridge && bridge->getRadius() < 2.0))
+                const bool normal_move = detailed_update && (visible || !(bridge && bridge->getRadius() < 2.0));
+                const bool request_move = LLSecondViewAttachment::requestMove(
+                    normal_move, follow_point, *attachment, *attached_object);
+                if (isSelf() && LLSecondViewTrace::tracksPoint(attachment_point_id))
+                    LLSecondViewTrace::attachment(attached_object->getID(), request_move);
+                if (request_move)
                 {
                     //override rigged attachments' octree spatial extents with this avatar's bounding box
                     bool rigged = false;
-                    if (bridge)
+                    if (bridge && (normal_move || attached_object->mDrawable->isState(LLDrawable::RIGGED | LLDrawable::RIGGED_CHILD)))
                     {
                         //transform avatar bounding box into attachment's coordinate frame
                         LLVector4a extents[2];
@@ -3094,8 +3140,10 @@ void LLVOAvatar::idleUpdateMisc(bool detailed_update)
                     bridge = attached_object->mDrawable->getSpatialBridge();
                     if (bridge)
                     {
-                        if (!rigged)
+                        if (!rigged || !normal_move)
                         {
+                            // A supplemental move also uses the frame-deduplicated
+                            // bridge path; the main view owns rigged draw ordering.
                             gPipeline.updateMoveNormalAsync(bridge);
                         }
                         else

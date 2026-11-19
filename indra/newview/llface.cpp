@@ -25,6 +25,7 @@
  */
 
 #include "llviewerprecompiledheaders.h"
+#include "llsecondviewtrace.h"
 
 #include "lldrawable.h" // lldrawable needs to be included before llface
 #include "llface.h"
@@ -172,6 +173,7 @@ void LLFace::init(LLDrawable* drawablep, LLViewerObject* objp)
 
 void LLFace::destroy()
 {
+    LLSecondViewTrace::forget(*this);
     if (gDebugGL)
     {
         gPipeline.checkReferences(this);
@@ -2043,6 +2045,9 @@ bool LLFace::getGeometryVolume(const LLVolume& volume,
                 tmp.store4a((F32*) dst);
                 dst += 4;
             }
+
+            if (!rigged && !rebuild_for_gltf)
+                LLSecondViewTrace::baked(*this, mat_vert_in);
 
             while (dst < end_f32)
             {

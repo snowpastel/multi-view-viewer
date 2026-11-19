@@ -678,6 +678,7 @@ set(viewer_SOURCE_FILES
     llviewercontrol.cpp
     llviewercontrollistener.cpp
     llviewerdisplay.cpp
+    llsecondviewtrace.cpp
     llviewerdisplayname.cpp
     llviewerfloaterreg.cpp
     llviewerfoldertype.cpp
@@ -876,6 +877,7 @@ set(viewer_HEADER_FILES
     llflexibleobject.h
     llfloatersecondview.h
     llsecondvieworbit.h
+    llsecondviewtrace.h
     llfloater360capture.h
     llfloaterabout.h
     llfloateravatarwelcomepack.h

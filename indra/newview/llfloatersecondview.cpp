@@ -1,5 +1,7 @@
 #include "llviewerprecompiledheaders.h"
 #include "llfloatersecondview.h"
+#include "llfloaterreg.h"
+#include "llsecondviewattachment.h"
 #include "llfocusmgr.h"
 #include "llcheckboxctrl.h"
 #include "llbutton.h"
@@ -8,6 +10,12 @@
 #include "llviewerwindow.h"
 #include "llvoavatarself.h"
 #include "pipeline.h"
+
+bool LLFloaterSecondView::isSecondViewActive()
+{
+    auto* floater = LLFloaterReg::findTypedInstance<LLFloaterSecondView>("second_view");
+    return floater && LLSecondViewAttachment::viewActive(floater->isInVisibleChain(), floater->isMinimized());
+}
 
 bool LLFloaterSecondView::postBuild()
 {
