@@ -1,3 +1,22 @@
+# SnowPastel Multi-View Viewer
+
+Second Lifeの公式Viewerをベースにした、SnowPastelの2画面表示実験です。メイン画面で後ろ姿を見ながら、小窓で正面の前髪や服装を確認できます。
+
+![メイド服のアバターを、メイン画面に後ろから、第2カメラの小窓に正面から同時に映した様子](front-and-back-view.png)
+
+*前後2画面の表示例（初期の実験画面）*
+
+[▶ YouTubeで実験動画を見る「改造Second Life Viewer でのカメラを増やす実験」](https://www.youtube.com/watch?v=E-E9NdHK_o4)
+
+## 26.4.0.7でできること
+
+- 第2カメラの「顔」と「全身」を切り替えられます。顔アップでは、Shift＋ドラッグで構図を調整でき、小窓のサイズも変えられます。
+- メインカメラを周囲に向けて自分が画面から外れても、小窓では自分のアバターを見続けられます。顔アップ・全身の両方で、鼻に着けた角や耳の飾りが頭の動きに追従することを確認しました。
+
+## ベースとなった公式Viewer
+
+以下はLinden Labの公式Viewerに関する資料です。ダウンロードリンクは公式版の配布先です。
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="doc/sl-logo-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="doc/sl-logo.png">
@@ -5,26 +24,26 @@
 </picture>
 
 **[Second Life][] is a free 3D virtual world where users can create, connect and chat with others from around the
-world.** This repository contains the source code for the official client.
+world.** The upstream [secondlife/viewer](https://github.com/secondlife/viewer) repository contains the source code for the official client.
 
-## Open Source
+### Open Source
 
 Second Life provides a huge variety of tools for expression, content creation, socialization and play. Its vibrancy is
 only possible because of input and contributions from its residents. The client codebase has been open source since
 2007 and is available under the LGPL license. The [Open Source Portal][] contains additional information about Linden
 Lab's open source history and projects.
 
-## Download
+### Download
 
 Most people use a pre-built viewer release to access Second Life. Windows and macOS builds are
 [published on the official website][download]. More experimental viewers, such as release candidates and
 project viewers, are detailed on the [Alternate Viewers page](https://releasenotes.secondlife.com/viewer.html).
 
-### Third Party Viewers
+#### Third Party Viewers
 
 Third party maintained forks, which include Linux compatible builds, are indexed in the [Third Party Viewer Directory][tpv].
 
-## Build Instructions
+### Build Instructions
 
 [Windows](https://wiki.secondlife.com/wiki/Build_the_Viewer_on_Windows)
 
@@ -32,7 +51,7 @@ Third party maintained forks, which include Linux compatible builds, are indexed
 
 [Linux](https://wiki.secondlife.com/wiki/Build_the_Viewer_on_Linux)
 
-## Contribute
+### Contribute
 
 Help make Second Life better! You can get involved with improvements by filing bugs, suggesting enhancements, submitting
 pull requests and more. See the [CONTRIBUTING][] and the [open source portal][] for details.
