@@ -78,9 +78,31 @@
            left="70"
            top="39"
            name="sl_logo_small" />
+          <text
+           name="viewer_name"
+           layout="topleft"
+           follows="left|top"
+           left="12"
+           top_pad="4"
+           width="276"
+           height="20"
+           halign="center"
+           font="SansSerifLarge"
+           text_color="White" />
+          <text
+           name="viewer_version"
+           layout="topleft"
+           follows="left|top"
+           left="12"
+           top_pad="0"
+           width="276"
+           height="17"
+           halign="center"
+           font="SansSerif"
+           text_color="White" />
           <icon
            left="40"
-           top_pad="30"
+           top_pad="6"
            width="220"
            height="28"
            image_name="TextField_Active"

@@ -3114,7 +3114,7 @@ bool LLAppViewer::initConfiguration()
     //
     // Set the name of the window
     //
-    gWindowTitle = LLTrans::getString("APP_NAME");
+    gWindowTitle = LLVersionInfo::instance().getChannelAndVersion();
 #if LL_DEBUG
     gWindowTitle += std::string(" [DEBUG]");
 #endif
@@ -3277,6 +3277,7 @@ void LLAppViewer::initStrings()
     LLTransUtil::parseLanguageStrings("language_settings.xml");
 
     // parseStrings() sets up the LLTrans substitution table. Add this one item.
+    LLTrans::setDefaultArg("[VIEWER_NAME]", LLVersionInfo::instance().getChannel());
     LLTrans::setDefaultArg("[sourceid]", gSavedSettings.getString("sourceid"));
 
     // Now that we've set "[sourceid]", have to go back through

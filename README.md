@@ -1,6 +1,6 @@
 # SnowPastel Multi-View Viewer
 
-**[Windows試用版 26.4.0.7 をダウンロード（説明書改訂版・ZIP・約264 MiB）](https://github.com/snowpastel/multi-view-viewer/releases/download/v26.4.0.7/SnowPastel-Multi-View-26.4.0.7-win64-guide2.zip)**
+**[Windows試用版 26.4.0.8 をダウンロード（ZIP・約257 MiB）](https://github.com/snowpastel/multi-view-viewer/releases/download/v26.4.0.8/SnowPastel-Multi-View-26.4.0.8-win64.zip)**
 
 Windows x64用です。ZIPをすべて展開し、**「試用版を起動.cmd」** をダブルクリックしてください。設定とキャッシュは展開先の「試用データ」に保存されます。
 
@@ -21,18 +21,18 @@ Second Lifeの公式Viewerをベースにした、SnowPastelの2画面表示実�
 3. メニューバーに現れた **「開発」→「正面ビューを表示」** を選びます。
 4. 「第2カメラ」の小窓で「顔」または「全身」を選びます。
 
-## 26.4.0.7でできること
+## 26.4.0.8でできること
 
 - 第2カメラの「顔」と「全身」を切り替えられます。顔アップでは、Shift＋ドラッグで構図を調整でき、小窓のサイズも変えられます。
-- メインカメラを周囲に向けて自分が画面から外れても、小窓では自分のアバターを見続けられます。顔アップ・全身の両方で、鼻に着けた角や耳の飾りが頭の動きに追従することを確認しました。
+- メインカメラを周囲に向けて自分が画面から外れても、小窓では自分のアバターを見続けられます。顔アップ・全身の両方で、鼻に着けた角や耳の飾りが頭の動きに追従することを26.4.0.7の実機で確認しました。
 
 ## 試用前のご案内
 
 **提供元とサポート**　SnowPastel Multi-View Viewer はSnowPastelが配布する実験用Viewerです。試用版のため、個別サポートと不具合報告の受付は行っていません。This software is not provided or supported by Linden Lab, the makers of Second Life.
 
-**画面に表示される名前**　このWindows版では、ログイン画面のタイトルは「Second Life」です。版を確かめるには、ログイン前に「ヘルプ」→「Second Lifeについて」を開いてください。「情報」の先頭に `PJ0225 Dual View 26.4.0.7 (64bit)` と表示されます。`PJ0225 Dual View` はこの試用版の開発名です。
+**画面で名前と版番号を確認する**　ログイン画面のユーザー名欄の上には「SnowPastel Multi-View Viewer」と「26.4.0.8」が2行で表示されます。タイトルバーは「SnowPastel Multi-View Viewer 26.4.0.8」です。「ヘルプ」→「SnowPastel Multi-View Viewerについて」を開くと、「情報」の先頭で `SnowPastel Multi-View Viewer 26.4.0.8 (64bit)` を確認できます。
 
-**プライバシーポリシー（26.4.0.7 Windows試用版）**　「試用版を起動.cmd」から起動すると、設定と動作ログは展開先の `試用データ/roaming/SecondLife`、キャッシュは `試用データ/local/SecondLife` に保存されます。会話ログを保存する場合の指定先は `試用データ/chat_logs`、一時ファイルは `試用データ/temp` です。ログイン情報の記憶はログイン画面で選べます。試用データを消す場合はViewer終了後に展開フォルダーを削除してください。他の人に渡すときは配布ZIPを使ってください。
+**プライバシーポリシー（26.4.0.8 Windows試用版）**　「試用版を起動.cmd」から起動すると、設定と動作ログは展開先の `試用データ/roaming/SecondLife`、キャッシュは `試用データ/local/SecondLife` に保存されます。会話ログを保存する場合の指定先は `試用データ/chat_logs`、一時ファイルは `試用データ/temp` です。ログイン情報の記憶はログイン画面で選べます。試用データを消す場合はViewer終了後に展開フォルダーを削除してください。他の人に渡すときは配布ZIPを使ってください。
 
 ログインやワールドの表示にはSecond Lifeのサービスと通信します。試用版ランチャーはクラッシュレポーターと装着物の計測CSVを無効にしています。第2カメラの描画はこのPCで行い、SnowPastelが小窓の映像や会話ログを受け取る機能はありません。
 

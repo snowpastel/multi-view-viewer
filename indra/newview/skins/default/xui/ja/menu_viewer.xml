@@ -219,7 +219,7 @@
 		<menu_item_call label="バグを報告する" name="Report Bug"/>
 		<menu_item_separator/>
 		<menu_item_call label="衝突・プッシュ＆打撃" name="Bumps, Pushes &amp;amp; Hits"/>
-		<menu_item_call label="[APP_NAME]について" name="About Second Life"/>
+		<menu_item_call label="[VIEWER_NAME]について" name="About Second Life"/>
 	</menu>
 	<menu label="アドバンス" name="Advanced">
 		<menu_item_call label="テクスチャをリベークする" name="Rebake Texture"/>

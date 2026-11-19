@@ -311,9 +311,9 @@ LLPanelLogin::LLPanelLogin(const LLRect &rect,
         onUpdateStartSLURL(start_slurl); // updates grid if needed
     }
 
-    std::string channel = LLVersionInfo::instance().getChannel();
-    std::string version = stringize(LLVersionInfo::instance().getShortVersion(), " (",
-                                    LLVersionInfo::instance().getBuild(), ')');
+    const auto& version_info = LLVersionInfo::instance();
+    getChild<LLTextBox>("viewer_name")->setText(version_info.getChannel());
+    getChild<LLTextBox>("viewer_version")->setText(version_info.getVersion());
 
     LLTextBox* forgot_password_text = getChild<LLTextBox>("forgot_password_text");
     forgot_password_text->setClickedCallback(onClickForgotPassword, NULL);
