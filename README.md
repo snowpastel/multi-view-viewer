@@ -1,6 +1,6 @@
 # SnowPastel Multi-View Viewer
 
-**[Windows試用版 26.4.0.7 をダウンロード（ZIP・約264 MiB）](https://github.com/snowpastel/multi-view-viewer/releases/download/v26.4.0.7/SnowPastel-Multi-View-26.4.0.7-win64.zip)**
+**[Windows試用版 26.4.0.7 をダウンロード（説明書改訂版・ZIP・約264 MiB）](https://github.com/snowpastel/multi-view-viewer/releases/download/v26.4.0.7/SnowPastel-Multi-View-26.4.0.7-win64-guide2.zip)**
 
 Windows x64用です。ZIPをすべて展開し、**「試用版を起動.cmd」** をダブルクリックしてください。設定とキャッシュは展開先の「試用データ」に保存されます。
 
@@ -11,6 +11,13 @@ Second Lifeの公式Viewerをベースにした、SnowPastelの2画面表示実�
 *前後2画面の表示例（初期の実験画面）*
 
 [▶ YouTubeで実験動画を見る「改造Second Life Viewer でのカメラを増やす実験」](https://www.youtube.com/watch?v=E-E9NdHK_o4)
+
+## 初めて第2カメラを開く
+
+1. ログイン後、メニューバーの「私」→「環境設定…」を選びます。Ctrl＋Pでも開けます。
+2. 「アドバンス」タブで **「開発メニューを表示」** にチェックを入れ、「OK」を押します。
+3. メニューバーに現れた **「開発」→「正面ビューを表示」** を選びます。
+4. 「第2カメラ」の小窓で「顔」または「全身」を選びます。
 
 ## 26.4.0.7でできること
 
